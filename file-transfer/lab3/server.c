@@ -1,10 +1,10 @@
 /**
  * @file server.c
  * @author Meghna Ravikumar & Ankur Samanta
- * @version 2.0
- * @date 2023-02-05
+ * @version 1.0
+ * @date 2023-02-7
  *
- * @cite Beej's Guide 6.3 (Datagram Sockets)
+ * @cite Beej's Guide
  *
  */
 

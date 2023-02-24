@@ -4,7 +4,7 @@
  * @version 2.0
  * @date 2023-02-05
  *
- * @cite Beej's Guide 6.3 (Datagram Sockets)
+ * @cite Beej's Guide
  *
  */
 
