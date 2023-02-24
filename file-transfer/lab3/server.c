@@ -2,7 +2,7 @@
  * @file server.c
  * @author Meghna Ravikumar & Ankur Samanta
  * @version 1.0
- * @date 2023-02-7
+ * @date 2023-02-27
  *
  * @cite Beej's Guide
  *
