@@ -19,7 +19,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <stdbool.h>
-#include "/nfs/ug/homes-5/r/raviku26/ece361/packet.h"
+#include "packet.h"
 
 #define MAXBUFLEN 100
 
