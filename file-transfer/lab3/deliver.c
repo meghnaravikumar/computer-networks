@@ -88,6 +88,17 @@ int main(int argc, char const *argv[]){
 
     end = clock(); // end the clock
     fprintf(stdout, "Round-trip time (RTT): %f s.\n", (double)(end - start)/CLOCKS_PER_SEC);
+    double time = end - start; // store rtt
+
+    /* SECTION 3 - config timeout */
+    struct timeval to; 
+    // check below init values
+    to.tv_sec = 1;
+    to.tv_usec = 100000;
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &to, sizeof(to)) < 0) {
+		printf("Config timeout failure.\n");
+		exit(1);
+	}
 
     if(strcmp(msg, "yes") == 0) {
         fprintf(stdout, "A file transfer can start.\n");
@@ -139,13 +150,30 @@ int main(int argc, char const *argv[]){
         }
 
 		if(recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size) == -1) {
-			error_msg("Failed to recieve ACK.\n");
+			// SECTION 3 CODE CONTINUED BELOW:
+            if (errno == EAGAIN) {
+                // timeout occured
+                error_msg("Timeout occured, resending packet:\n");
+                printf("%d.\n", frag_no);
+                // rewind file pointer to before last packet transmission to resend packet
+                fseek(fp, -pk.size, SEEK_CUR);
+                continue;
+            }
+            else {
+                error_msg("Failed to recieve ACK, unknown error.\n");
+            }
 		}
 
         if(strcmp(msg, "ACK") == 0){
-			printf("ACK receieved.\n");
+			printf("ACK recieved.\n");
 		}else{
-			error_msg("Failed to recieve ACK.\n");
+			// SECTION 3 CODE CONTINUED BELOW:
+            // NACK
+            error_msg("Failed to recieve ACK, resending packetL:\n");
+            printf("%d.\n", frag_no);
+            // rewind file pointer to before last packet transmission to resend packet
+            fseek(fp, -pk.size, SEEK_CUR);
+            continue;
 		}
 
 		free(packet_content);

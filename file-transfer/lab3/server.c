@@ -106,8 +106,19 @@ int main(int argc, char *argv[]) {
 		file_data = pk.filedata;
 
 		if(pk.frag_no == 1) fp = fopen(filename, "wb");
-
-		fwrite(file_data, 1, pk.size, fp);
+        
+        /* SECTION 3 code below: */
+        // fwrite returns number of fragments successfully written
+		int num_written = fwrite(file_data, 1, pk.size, fp);
+        if (num_written != pk.size) {
+            // mismatch in fragments written and size of packet means error in writing
+            error_msg("Write failure:\n");
+            printf("%d.\n", pk.frag_no);
+            strcpy(pk.filedata, "NACK");
+        }
+        else {
+            strcpy(pk.filedata, "ACK");
+        }
 
 		if(pk.frag_no == pk.total_frag) break;
 
