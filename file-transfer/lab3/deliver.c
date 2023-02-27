@@ -158,8 +158,7 @@ int main(int argc, char const *argv[]){
 			// SECTION 3 CODE CONTINUED BELOW:
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout occured
-                printf("Timeout occured, resending packet:\n");
-                printf("%d.\n", frag_no);
+                printf("Failed to recieve ACK, resending packet #%d\n". frag_no);
                 // rewind file pointer to before last packet transmission to resend packet
                 fseek(fp, -pk.size, SEEK_CUR);
                 continue;
@@ -174,8 +173,7 @@ int main(int argc, char const *argv[]){
 		}else{
 			// SECTION 3 CODE CONTINUED BELOW:
             // NACK
-            printf("Failed to recieve ACK, resending packetL:\n");
-            printf("%d.\n", frag_no);
+            printf("Failed to recieve ACK, resending packet #%d\n". frag_no);
             // rewind file pointer to before last packet transmission to resend packet
             fseek(fp, -pk.size, SEEK_CUR);
             continue;
