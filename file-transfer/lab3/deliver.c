@@ -40,6 +40,7 @@ int main(int argc, char const *argv[]){
     char msg[MAXBUFLEN] = {0};
     socklen_t server_addr_size = sizeof(server_addr);
     clock_t start, end, rtt;
+    double n = 0;
 
     // check for correct execution command structure
     if(argc != 3) error_msg("Format must be: deliver <server address> <server port number>.\n");
@@ -91,7 +92,7 @@ int main(int argc, char const *argv[]){
     rtt = end - start; // store rtt
 
     /* SECTION 3 - config timeout */
-    struct timeval to; 
+    struct timeval to;
     // check below init values
     double tval = rtt / CLOCKS_PER_SEC;
     if (tval < 1) {
