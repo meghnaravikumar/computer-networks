@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <stdbool.h>
+#include <time.h>
 #include "packet.h"
 
 #define MAXBUFLEN 100
@@ -89,23 +90,24 @@ int main(int argc, char *argv[]) {
 			error_msg("Failed to recieve packet.\n");
 		}
 
+        struct packet pk = {0};
+
         total_frag = strtok(data, ":");
         frag_no = strtok(NULL, ":");
         size = strtok(NULL, ":");
         filename = strtok(NULL, ":");
 
-        if(frag_no == 1) fp = fopen(filename, "wb");
+        pk.total_frag = atoi(total_frag);
+        pk.frag_no =  atoi(frag_no);
+        pk.size = atoi(size);
+        pk.filename = filename;
+
+        if(pk.frag_no == 1) fp = fopen(filename, "wb");
 
         if(uniform_rand() > 1e-2) {
             if(sendto(sockfd, "ACK", MAXBUFLEN, 0, (struct sockaddr *) &client_addr, sizeof(client_addr)) == -1) {
                 error_msg("Failed to send ACK.\n");
             }
-
-            struct packet pk = {0};
-            pk.total_frag = atoi(total_frag);
-            pk.frag_no =  atoi(frag_no);
-            pk.size = atoi(size);
-            pk.filename = filename;
 
             index = get_packet_length(pk);
             packet_content = malloc(sizeof(char) * pk.size);
