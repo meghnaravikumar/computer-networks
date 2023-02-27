@@ -114,7 +114,8 @@ int main(int argc, char *argv[]) {
             memcpy(packet_content, &data[index], pk.size);
             memcpy(pk.filedata, packet_content, pk.size);
             file_data = pk.filedata;
-
+        }else{
+            error_msg("Server killed.")
         }
 
         /* SECTION 3 code below: */
