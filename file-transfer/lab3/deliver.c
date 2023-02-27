@@ -39,7 +39,7 @@ int main(int argc, char const *argv[]){
     char filename[MAXBUFLEN] = {0};
     char msg[MAXBUFLEN] = {0};
     socklen_t server_addr_size = sizeof(server_addr);
-    clock_t start, end;
+    clock_t start, end, rtt;
 
     // check for correct execution command structure
     if(argc != 3) error_msg("Format must be: deliver <server address> <server port number>.\n");
@@ -88,13 +88,17 @@ int main(int argc, char const *argv[]){
 
     end = clock(); // end the clock
     fprintf(stdout, "Round-trip time (RTT): %f s.\n", (double)(end - start)/CLOCKS_PER_SEC);
-    double time = end - start; // store rtt
+    rtt = end - start; // store rtt
 
     /* SECTION 3 - config timeout */
     struct timeval to; 
     // check below init values
-    to.tv_sec = 1;
-    to.tv_usec = 100000;
+    double tval = rtt / CLOCKS_PER_SEC;
+    if (tval < 1) {
+        tval = 1;
+    }
+    to.tv_sec = tval;
+    to.tv_usec = 0;
     if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &to, sizeof(to)) < 0) {
 		printf("Config timeout failure.\n");
 		exit(1);
