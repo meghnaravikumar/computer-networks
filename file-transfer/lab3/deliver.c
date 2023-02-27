@@ -156,7 +156,7 @@ int main(int argc, char const *argv[]){
 
 		if(recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size) == -1) {
 			// SECTION 3 CODE CONTINUED BELOW:
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout occured
                 error_msg("Timeout occured, resending packet:\n");
                 printf("%d.\n", frag_no);
