@@ -41,7 +41,6 @@ int main(int argc, char *argv[]) {
     socklen_t client_len;
     char buf[MAXBUFLEN] = {0};
     char *rsp = "no";
-    srand(time(NULL)); // randomize seed
 
     // check for correct execution command structure
     if(argc != 2) error_msg("Incorrect format. Must be: server -<UDP listen port>\n");
@@ -115,7 +114,8 @@ int main(int argc, char *argv[]) {
             memcpy(pk.filedata, packet_content, pk.size);
             file_data = pk.filedata;
         }else{
-            error_msg("Server killed.");
+            sendto(sockfd, "dropped", MAXBUFLEN, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+            printf("Packet #%d dropped.\n", pk.frag_no);
         }
 
         /* SECTION 3 code below: */

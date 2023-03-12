@@ -95,7 +95,7 @@ int main(int argc, char const *argv[]){
     struct timeval to;
     // check below init values
     double tval = rtt / CLOCKS_PER_SEC;
-    if (tval < 1) {
+    if (tval > 1) {
         tval = 1;
     }
     to.tv_sec = tval;
@@ -154,30 +154,25 @@ int main(int argc, char const *argv[]){
             error_msg("Failed to send packet.\n");
         }
 
-		if(recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size) == -1) {
-			// SECTION 3 CODE CONTINUED BELOW:
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // timeout occured
-                printf("Failed to recieve ACK, resending packet #%d\n". frag_no);
-                // rewind file pointer to before last packet transmission to resend packet
-                fseek(fp, -pk.size, SEEK_CUR);
-                continue;
+        if(recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size) == -1){
+            // check if a timeout has occurred
+		    while((errno == EAGAIN || errno == EWOULDBLOCK)){
+			    // SECTION 3 CODE CONTINUED BELOW:
+                printf("(Timeout), trying to resend packet #%d\n", pk.frag_no);
+                recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size);
+		    }
+        }
+
+        while(strcmp(msg, "dropped") == 0){
+            printf("Trying to resend packet #%d\n", pk.frag_no);
+            if(recvfrom(sockfd, msg, MAXBUFLEN, 0, (struct sockaddr *)&server_addr, &server_addr_size) == -1){
+                    break;
             }
-            else {
-                error_msg("Failed to recieve ACK, unknown error.\n");
-            }
-		}
+        }
 
         if(strcmp(msg, "ACK") == 0){
-			printf("ACK recieved.\n");
-		}else{
-			// SECTION 3 CODE CONTINUED BELOW:
-            // NACK
-            printf("Failed to recieve ACK, resending packet #%d\n". frag_no);
-            // rewind file pointer to before last packet transmission to resend packet
-            fseek(fp, -pk.size, SEEK_CUR);
-            continue;
-		}
+            printf("ACK recieved.\n");
+        }
 
 		free(packet_content);
 
