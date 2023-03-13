@@ -376,7 +376,7 @@ static void menu_execute(char *line, int isargs)
 		}
 
 		result = cmd_dispatch(command);
-		if (result) {
+		if (result == -1) {
 			fprintf(stdout, "Text conferencing command failed.\n");
 		}
 	}
