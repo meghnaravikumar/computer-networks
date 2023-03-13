@@ -48,10 +48,10 @@ int main(int argc, char *argv[])
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
 
-    char buf[256];    // buffer for client data
+    char buf[MAX_DATA];    // buffer for client data
     int nbytes;
 
-    // added this in
+    // added this in - do we need?
     char message[MAX_DATA];
     char response[MAX_DATA];
 
@@ -117,38 +117,68 @@ int main(int argc, char *argv[])
      * when a socket is ready to be read, we're either reading from a new
      * connection or from an already connected client.
     */
-    while(1){ // accepts multiple connection requests
-
-        read_fds = master;
-        select(fdmax + 1, &read_fds, NULL, NULL, NULL);
-
-        // looping through all socket fds
-        for(int sockfd = 0; sockfd < fdmax + 1; sockfd++){
-            if(FD_ISSET(sockfd, &read_fds)){ // a socket is ready to be read
-                if(sockfd == listener){ // make a new connection
-                    // 3 way handshake
-                    socklen_t sin = sizeof(remoteaddr);
-                    sockfd2 = accept(listener, (struct sockaddr *)&remoteaddr, &sin);
-
-                    FD_SET(sockfd2, &master); // add new socket fd to master
-                    if(sockfd2 > fdmax) fdmax = sockfd2; // keep track of max fd
-
-                }else{ // read from an existing connection
-                    nbytes = recv(sockfd, message, MAX_DATA - 1, 0);
-                    message[nbytes] = '\0';
-
-                    if(nbytes > 0){
-                        // decode the message
-                        struct message *recv_msg;
-                        recv_msg = decode_message(message);
-
-
-
-                    }
-                }
-            }
+   // main loop
+    for(;;) {
+        read_fds = master; // copy it
+        if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("select");
+            exit(4);
         }
-    }
+
+        // run through the existing connections looking for data to read
+        for(i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) { // we got one!!
+                if (i == listener) {
+                    // handle new connections
+                    addrlen = sizeof remoteaddr;
+                    newfd = accept(listener,
+                        (struct sockaddr *)&remoteaddr,
+                        &addrlen);
+
+                    if (newfd == -1) {
+                        perror("accept");
+                    } else {
+                        FD_SET(newfd, &master); // add to master set
+                        if (newfd > fdmax) {    // keep track of the max
+                            fdmax = newfd;
+                        }
+                        printf("selectserver: new connection from %s on "
+                            "socket %d\n",
+                            inet_ntop(remoteaddr.ss_family,
+                                get_in_addr((struct sockaddr*)&remoteaddr),
+                                remoteIP, INET6_ADDRSTRLEN),
+                            newfd);
+                    }
+                } else {
+                    // handle data from a client
+                    if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                        // got error or connection closed by client
+                        if (nbytes == 0) {
+                            // connection closed
+                            printf("selectserver: socket %d hung up\n", i);
+                        } else {
+                            perror("recv");
+                        }
+                        close(i); // bye!
+                        FD_CLR(i, &master); // remove from master set
+                    } else {
+                        // we got some data from a client
+                        for(j = 0; j <= fdmax; j++) {
+                            // send to everyone!
+                            if (FD_ISSET(j, &master)) {
+                                // except the listener and ourselves
+                                if (j != listener && j != i) {
+                                    if (send(j, buf, nbytes, 0) == -1) {
+                                        perror("send");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } // END handle data from client
+            } // END got new incoming connection
+        } // END looping through file descriptors
+    } // END for(;;)--and you thought it would never end!
 
     return 0;
 }
