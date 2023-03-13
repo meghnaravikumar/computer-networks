@@ -6,47 +6,206 @@
 #define MAXMENUARGS 10
 #define MAXMENUCMDS 8
 
+struct session_details {
+	bool active;
+	int sockfd;
+	pthread_t threadid;
+};
+
+struct session_details session;
+
+
+void error_msg(char *message){
+    fprintf(stderr, message);
+    exit(1);
+}
+
+void out_msg(char *message) {
+	fprintf(stdout, message);
+}
 
 /**
  * @brief Log into the server at the given address and port.
+ * args[0]: 
 */
 int cmd_login(int nargs, char **args){
     if(nargs != 5) return -1;
-    fprintf(stdout, "cmd_login\n");
+    out_msg("cmd_login\n");
+
+	// cmd: client_id, password, server_ip, server_port
+
+	// error checking
+
+	// TCP connection
+	
+	// from Beej's guide
+	int rv;
+	int yes=1;
+	char remoteIP[INET6_ADDRSTRLEN];
+	struct addrinfo hints, *ai, *p;
+
+	// get us a socket and bind it
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    if ((rv = getaddrinfo(<server_ip>, <server_port>, &hints, &ai)) != 0) {
+        fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
+        exit(1); //exit or return?
+    }
+
+    for(p = ai; p != NULL; p = p->ai_next) {
+        if (session.sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol) < 0) {
+			error_msg("client socket error\n");
+			continue;
+		}
+        
+        // lose the pesky "address already in use" error message - IS THIS NECESSARY
+        setsockopt(session.sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+        if (connect(session.sockfd, p->ai_addr, p->ai_addrlen) < 0) {
+            close(session.sockfd);
+			session.sockfd = -1;
+			error_msg("client connect error\n");
+            continue;
+        }
+        break;
+	}
+
+	// if we got here, it means we didn't get bound
+    if (p == NULL) {
+        fprintf(stderr, "selectserver: failed to bind\n");
+        exit(2);
+	}
+
+	freeaddrinfo(ai); // all done with this
+
+	// create message and convert to string for sending
+    encode_message(create_message(LOGIN, strlen(<password>), <client_id>, <password>), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		close(session.sockfd);
+		session.sockfd = -1;
+		return; 
+	}
+
+	// HANDLE THREAD MESSAGING FOR LO_ACK and LO_NACK
+
+
+    
+
 }
 
 /**
  * @brief Log out of the server, but do not exit the client.
  * The client should return to the same state as when you
  * started running it.
+ * 
 */
 int cmd_logout(int nargs, char **args){
     if(nargs != 1) return -1;
-    fprintf(stdout, "cmd_logout\n");
+    out_msg("cmd_logout\n");
+
+	// check session status
+	if (!session.active) {return -1;}
+
+	// create message and convert to string for sending
+    encode_message(create_message(EXIT, 0, NULL, NULL), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		return; 
+	}
+
+	// we are logging out so we send cancellation request to thread (success: 0, error is nonzero)
+	if (pthread_cancel(session.threadid) == 0) {out_msg("logged out successfully\n");}
+	else {error_msg("logout failure\n");}
+
+	// toggle session status
+	session.active = false;
+	close(session.sockfd);
+	session.sockfd = -1;
+
 }
 
 /**
  * @brief Join the conference session with the given session ID.
+ * args[0]: sessionid
 */
 int cmd_joinsession(int nargs, char **args){
     if(nargs != 2) return -1;
     fprintf(stdout, "cmd_joinsession\n");
+
+	// check session status
+	if (session.active) {return -1;}
+
+	// if session id is valid
+	if (args[0] != NULL) {
+		// create message and convert to string for sending
+		encode_message(create_message(JOIN, strlen(args[0]), NULL, args[0]), buf);
+		
+		// send and error check
+		if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+			error_msg("client send error\n");
+			return;
+		}
+	}
+
+	// HANDLE THREAD MESSAGING for JN_ACK and JN_NACK
+
+	// toggle session status
+	session.active = true;
 }
 
 /**
  * @brief Leave the currently established session.
+ * args
 */
 int cmd_leavesession(int nargs, char **args){
     if(nargs != 1) return -1;
     fprintf(stdout, "cmd_leavesession\n");
+
+	// check session status
+	if (!session.active) {return -1;}
+
+	// create message and convert to string for sending
+    encode_message(create_message(LEAVE_SESS, 0, NULL, NULL), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		return; 
+	}
+
+	// toggle session status
+	session.active = false;
 }
 
 /**
  * @brief Create a new conference session and join it.
+ * args
 */
 int cmd_createsession(int nargs, char **args){
-    if(nargs != 2) return -1;
+    if(nargs != 2) return -1; // what is the second argument? shouldn't it be 1?
     fprintf(stdout, "cmd_createsession\n");
+
+	// check session status
+	if (session.active) {return -1;}
+
+	// create message and convert to string for sending
+	encode_message(create_message(NEW_SESS, 0, NULL, NULL), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		return; 
+	}
+
+	// toggle session status
+	session.active = true;
 }
 
 /**
@@ -55,6 +214,16 @@ int cmd_createsession(int nargs, char **args){
 int cmd_list(int nargs, char **args){
     if(nargs != 1) return -1;
     fprintf(stdout, "cmd_list\n");
+
+	// create message and convert to string for sending
+	encode_message(create_message(QUERY, 0, NULL, NULL), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		return; 
+	}
+
 }
 
 /**
@@ -72,6 +241,17 @@ int cmd_quit(int nargs, char **args){
 int cmd_text(int nargs, char **args){
     // we'll deal with this one last
     fprintf(stdout, "cmd_text\n");
+
+	if (!session.sockfd) {return;}
+
+	// create message and convert to string for sending - is the way i used strlen(buf) correct?
+	encode_message(create_message(MESSAGE, strlen(buf), NULL, buf), buf);
+
+	// send and error check
+	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
+		error_msg("client send error\n");
+		return; 
+	}
 }
 
 
