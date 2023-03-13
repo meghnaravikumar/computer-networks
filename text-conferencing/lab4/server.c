@@ -51,9 +51,13 @@ int main(int argc, char *argv[])
     char buf[256];    // buffer for client data
     int nbytes;
 
+    // added this in
+    char message[MAX_DATA];
+    char response[MAX_DATA];
+
     char remoteIP[INET6_ADDRSTRLEN];
 
-    int yes=1;        // for setsockopt() SO_REUSEADDR, below
+    int yes = 1;        // for setsockopt() SO_REUSEADDR, below
     int i, j, rv;
 
     struct addrinfo hints, *ai, *p;
@@ -70,12 +74,12 @@ int main(int argc, char *argv[])
         fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
         exit(1);
     }
-    
+
     for(p = ai; p != NULL; p = p->ai_next) {
         if ((listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
             continue;
         }
-        
+
         // lose the pesky "address already in use" error message
         if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
             exit(1);
@@ -109,8 +113,42 @@ int main(int argc, char *argv[])
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
 
-    // NOITE: NEED TO WRITE MAIN LOOP BELOW
+    /**
+     * when a socket is ready to be read, we're either reading from a new
+     * connection or from an already connected client.
+    */
+    while(1){ // accepts multiple connection requests
 
+        read_fds = master;
+        select(fdmax + 1, &read_fds, NULL, NULL, NULL);
+
+        // looping through all socket fds
+        for(int sockfd = 0; sockfd < fdmax + 1; sockfd++){
+            if(FD_ISSET(sockfd, &read_fds)){ // a socket is ready to be read
+                if(sockfd == listener){ // make a new connection
+                    // 3 way handshake
+                    socklen_t sin = sizeof(remoteaddr);
+                    sockfd2 = accept(listener, (struct sockaddr *)&remoteaddr, &sin);
+
+                    FD_SET(sockfd2, &master); // add new socket fd to master
+                    if(sockfd2 > fdmax) fdmax = sockfd2; // keep track of max fd
+
+                }else{ // read from an existing connection
+                    nbytes = recv(sockfd, message, MAX_DATA - 1, 0);
+                    message[nbytes] = '\0';
+
+                    if(nbytes > 0){
+                        // decode the message
+                        struct message *recv_msg;
+                        recv_msg = decode_message(message);
+
+
+
+                    }
+                }
+            }
+        }
+    }
 
     return 0;
 }

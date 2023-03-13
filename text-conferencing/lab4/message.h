@@ -53,5 +53,21 @@ void encode_message(const struct message msg, char *temp) {
     strncat(temp, msg.data, BUFSIZ - strlen(temp) - 1);
 }
 
+struct message decode_message(char *msg){
+    struct message decoded;
+    char *source, *data, *type, *size;
+
+    type = strtok(msg, ":");
+    size = strtok(NULL, ":");
+    source = strtok(NULL, ":");
+    data = strtok(NULL, ":");
+
+    decoded.type = atoi(type);
+    decoded.size =  atoi(size);
+    strcpy(decoded.source, source);
+    strcpy(decoded.data, data);
+
+    return decoded;
+}
 
 #endif

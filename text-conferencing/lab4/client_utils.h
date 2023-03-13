@@ -26,18 +26,23 @@ void out_msg(char *message) {
 
 /**
  * @brief Log into the server at the given address and port.
- * args[0]: 
+ * args[0]:
 */
 int cmd_login(int nargs, char **args){
     if(nargs != 5) return -1;
     out_msg("cmd_login\n");
 
 	// cmd: client_id, password, server_ip, server_port
+	char *client_id, *password, *server_ip, *server_port;
+	client_id = args[1];
+	password = args[2];
+	server_ip = args[3];
+	server_port = args[4];
 
 	// error checking
 
 	// TCP connection
-	
+
 	// from Beej's guide
 	int rv;
 	int yes=1;
@@ -49,7 +54,7 @@ int cmd_login(int nargs, char **args){
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    if ((rv = getaddrinfo(<server_ip>, <server_port>, &hints, &ai)) != 0) {
+    if ((rv = getaddrinfo(server_ip, server_port, &hints, &ai)) != 0) {
         fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
         exit(1); //exit or return?
     }
@@ -59,7 +64,7 @@ int cmd_login(int nargs, char **args){
 			error_msg("client socket error\n");
 			continue;
 		}
-        
+
         // lose the pesky "address already in use" error message - IS THIS NECESSARY
         setsockopt(session.sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 
@@ -81,20 +86,20 @@ int cmd_login(int nargs, char **args){
 	freeaddrinfo(ai); // all done with this
 
 	// create message and convert to string for sending
-    encode_message(create_message(LOGIN, strlen(<password>), <client_id>, <password>), buf);
+    encode_message(create_message(LOGIN, strlen(password), client_id, password), buf);
 
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
 		close(session.sockfd);
 		session.sockfd = -1;
-		return; 
+		return -1;
 	}
 
 	// HANDLE THREAD MESSAGING FOR LO_ACK and LO_NACK
 
 
-    
+
 
 }
 
@@ -102,7 +107,7 @@ int cmd_login(int nargs, char **args){
  * @brief Log out of the server, but do not exit the client.
  * The client should return to the same state as when you
  * started running it.
- * 
+ *
 */
 int cmd_logout(int nargs, char **args){
     if(nargs != 1) return -1;
@@ -117,7 +122,7 @@ int cmd_logout(int nargs, char **args){
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
-		return; 
+		return -1;
 	}
 
 	// we are logging out so we send cancellation request to thread (success: 0, error is nonzero)
@@ -146,11 +151,11 @@ int cmd_joinsession(int nargs, char **args){
 	if (args[0] != NULL) {
 		// create message and convert to string for sending
 		encode_message(create_message(JOIN, strlen(args[0]), NULL, args[0]), buf);
-		
+
 		// send and error check
 		if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 			error_msg("client send error\n");
-			return;
+			return -1;
 		}
 	}
 
@@ -177,7 +182,7 @@ int cmd_leavesession(int nargs, char **args){
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
-		return; 
+		return -1;
 	}
 
 	// toggle session status
@@ -201,7 +206,7 @@ int cmd_createsession(int nargs, char **args){
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
-		return; 
+		return -1;
 	}
 
 	// toggle session status
@@ -221,7 +226,7 @@ int cmd_list(int nargs, char **args){
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
-		return; 
+		return -1;
 	}
 
 }
@@ -242,7 +247,7 @@ int cmd_text(int nargs, char **args){
     // we'll deal with this one last
     fprintf(stdout, "cmd_text\n");
 
-	if (!session.sockfd) {return;}
+	if (!session.sockfd) {return -1;}
 
 	// create message and convert to string for sending - is the way i used strlen(buf) correct?
 	encode_message(create_message(MESSAGE, strlen(buf), NULL, buf), buf);
@@ -250,7 +255,7 @@ int cmd_text(int nargs, char **args){
 	// send and error check
 	if ((num_bytes = send(session.sockfd, buf, BUFSIZ - 1, 0)) < 0) {
 		error_msg("client send error\n");
-		return; 
+		return -1;
 	}
 }
 
@@ -335,13 +340,13 @@ static int cmd_dispatch(char *cmd)
 
 		if (nargs >= MAXMENUARGS) {
 			fprintf(stdout, "Command line has too many words\n");
-			return 0;
+			return -1;
 		}
 		args[nargs++] = word;
 	}
 
 	if (nargs==0) {
-		return 0;
+		return -1;
 	}
 
 	for (i=0; i < MAXMENUCMDS; i++) {

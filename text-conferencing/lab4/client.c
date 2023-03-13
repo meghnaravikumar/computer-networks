@@ -46,8 +46,6 @@ int main(int argc, char *argv[])
         showmenu("Text conferencing menu:", opsmenu);
         fgets(cmd, sizeof(cmd), stdin);
         menu_execute(cmd, 1);
-
-
     }
 
 
