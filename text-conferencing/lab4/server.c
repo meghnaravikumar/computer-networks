@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
     fgets(cmd, sizeof(cmd), stdin);
     port_num = server_cmd(cmd);
 
-    if(port_num != 1){
+    if (port_num != 1) {
         fprintf(stdout, "Starting server at port %d...\n", port_num);
     }
 
@@ -75,75 +75,64 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    for(p = ai; p != NULL; p = p->ai_next) {
+    for (p = ai; p != NULL; p = p->ai_next) {
         if ((listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
+            perror("server: socket");
             continue;
         }
 
-        // lose the pesky "address already in use" error message
-        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+            perror("setsockopt");
             exit(1);
         }
 
         if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
             close(listener);
+            perror("server: bind");
             continue;
         }
 
         break;
     }
 
-    // if we got here, it means we didn't get bound
     if (p == NULL) {
-        fprintf(stderr, "selectserver: failed to bind\n");
-        exit(2);
+        fprintf(stderr, "server: failed to bind\n");
+        exit(1);
     }
 
     freeaddrinfo(ai); // all done with this
 
-    // listen
-    if (listen(listener, 10) == -1) {
+    if (listen(listener, BACKLOG) == -1) {
         perror("listen");
-        exit(3);
+        exit(1);
     }
 
-    // add the listener to the master set
     FD_SET(listener, &master);
 
-    // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
 
-    /**
-     * when a socket is ready to be read, we're either reading from a new
-     * connection or from an already connected client.
-    */
-   // main loop
-    for(;;) {
+    // main loop
+    for (;;) {
         read_fds = master; // copy it
         if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
             perror("select");
-            exit(4);
+            exit(1);
         }
 
         // run through the existing connections looking for data to read
-        for(i = 0; i <= fdmax; i++) {
+        for (i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds)) { // we got one!!
                 if (i == listener) {
                     // handle new connections
-                    addrlen = sizeof remoteaddr;
-                    newfd = accept(listener,
-                        (struct sockaddr *)&remoteaddr,
-                        &addrlen);
-
-                    if (newfd == -1) {
+                    addrlen = sizeof(remoteaddr);
+                    if ((newfd = accept(listener, (struct sockaddr *)&remoteaddr, &addrlen)) == -1) {
                         perror("accept");
                     } else {
                         FD_SET(newfd, &master); // add to master set
-                        if (newfd > fdmax) {    // keep track of the max
+                        if (newfd > fdmax) { // keep track of the max
                             fdmax = newfd;
                         }
-                        printf("selectserver: new connection from %s on "
-                            "socket %d\n",
+                        printf("server: new connection from %s on socket %d\n",
                             inet_ntop(remoteaddr.ss_family,
                                 get_in_addr((struct sockaddr*)&remoteaddr),
                                 remoteIP, INET6_ADDRSTRLEN),
@@ -151,11 +140,11 @@ int main(int argc, char *argv[])
                     }
                 } else {
                     // handle data from a client
-                    if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                    if ((nbytes = recv(i, buf, sizeof(buf), 0)) <= 0) {
                         // got error or connection closed by client
                         if (nbytes == 0) {
                             // connection closed
-                            printf("selectserver: socket %d hung up\n", i);
+                            printf("server: socket %d hung up\n", i);
                         } else {
                             perror("recv");
                         }
@@ -163,7 +152,7 @@ int main(int argc, char *argv[])
                         FD_CLR(i, &master); // remove from master set
                     } else {
                         // we got some data from a client
-                        for(j = 0; j <= fdmax; j++) {
+                        for (j = 0; j <= fdmax; j++) {
                             // send to everyone!
                             if (FD_ISSET(j, &master)) {
                                 // except the listener and ourselves
@@ -179,6 +168,5 @@ int main(int argc, char *argv[])
             } // END got new incoming connection
         } // END looping through file descriptors
     } // END for(;;)--and you thought it would never end!
-
     return 0;
 }
