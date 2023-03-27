@@ -1,8 +1,8 @@
 #ifndef SERVER_UTILS_H
 #define SERVER_UTILS_H
 
-#define NUM_USERS = 3
-#defube NUM_SESSIONS = 2
+#define NUM_USERS 3
+#define NUM_SESSIONS 2
 
 #include "message.h"
 
@@ -41,10 +41,10 @@ struct session servers[NUM_SESSIONS] = {
     { 2, false, 0, { { "", "", false, false, -1, -1 }, { "", "", false, false, -1, -1 }, { "", "", false, false, -1, -1 } } }
 };
 
-bool user_logged_in(char *username, char *password) {
+bool user_logged_in(char *username, char *password, int session_id) {
 	for (int i = 0; i < NUM_USERS; i++) {
-		if ((strcmp(logged_in_users[i].username, username) == 0 && strcmp(logged_in_users[i].password, password) == 0) && (servers[session_id].users_array[j].logged_in==true)) {
-            return true;    
+		if ((strcmp(logged_in_users[i].username, username) == 0 && strcmp(logged_in_users[i].password, password) == 0) && (servers[session_id].users_array[i].logged_in==true)) {
+            return true;
         }
 	}
 	return false;
@@ -55,7 +55,7 @@ bool add_user(int session_id, char *username, char *password, int sockfd, pthrea
         out_msg("Error: Maximum number of users reached in session.\n");
         return false;
     }
-	if (!user_logged_in(username, password)) {
+	if (!user_logged_in(username, password, session_id)) {
 		out_msg("Error: user not logged in\n");
 		return false;
 	}
@@ -119,7 +119,7 @@ bool remove_user(int session_id, char *username) {
 bool valid_user(char *username, char* password) {
 	for (int i = 0; i < NUM_USERS; i++) {
 		if(strcmp(user_database[i].username, username) == 0 && strcmp(user_database[i].password, password) == 0) {
-            return true;    
+            return true;
         }
     }
 	return false;
@@ -128,7 +128,7 @@ bool valid_user(char *username, char* password) {
 bool in_session(int session_id, char *username) {
 	for (int j = 0; j < NUM_USERS; j++) {
 		if ((strcmp(servers[session_id].users_array[j].username, username) == 0 && strcmp(servers[session_id].users_array[j].password, password) == 0) && (servers[session_id].users_array[j].joined==true)) {
-            return true;    
+            return true;
         }
 	}
 	return false;
@@ -251,8 +251,6 @@ struct message query_cmd(struct message msg) {
 	unsigned int type;
 	char data[MAX_DATA];
 }
-
-
 
 void client_handler(int session_id, char *username, char *password, int sockfd, pthread_t threadid) {
 	if (msg.type == LOGIN) {msg_send = login_cmd(msg);}

@@ -2,6 +2,7 @@
 #define CLIENT_UTILS_H
 
 #include "message.h"
+#include <pthread.h>
 
 #define MAXMENUARGS 10
 #define MAXMENUCMDS 8
