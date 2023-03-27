@@ -1,10 +1,15 @@
 #ifndef SERVER_UTILS_H
 #define SERVER_UTILS_H
 
-#define NUM_USERS = 3
-#defube NUM_SESSIONS = 2
+#define NUM_USERS 3
+#define NUM_SESSIONS 2
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 #include "message.h"
+
 
 void out_msg(char *message) {
 	fprintf(stdout, message);
@@ -17,7 +22,7 @@ typedef struct user {
 	bool logged_in;
 	bool joined;
 	int sockfd;
-	pthread_t threadid;
+	int threadid;
 } user;
 
 // fix syntax
@@ -50,7 +55,7 @@ bool user_logged_in(char *username, char *password) {
 	return false;
 }
 
-bool add_user(int session_id, char *username, char *password, int sockfd, pthread_t threadid) {
+bool add_user(int session_id, char *username, char *password, int sockfd, int threadid) {
     if (servers[session_id].active_users >= NUM_USERS) {
         out_msg("Error: Maximum number of users reached in session.\n");
         return false;
@@ -60,7 +65,7 @@ bool add_user(int session_id, char *username, char *password, int sockfd, pthrea
 		return false;
 	}
 	for (int i = 0; i < NUM_USERS; i++) {
-        if (!users_array[i].joined) {
+        if (!servers[session_id].users_array[i].joined) {
             strncpy(servers[session_id].users_array[i].username, username, 32);
             strncpy(servers[session_id].users_array[i].password, password, 32);
             servers[session_id].users_array[i].joined = true;
@@ -75,7 +80,7 @@ bool add_user(int session_id, char *username, char *password, int sockfd, pthrea
 	return false;
 }
 
-bool login_user(int session_id, char *username, char *password, int sockfd, pthread_t threadid) {
+bool login_user(char *username, char *password, int sockfd, int threadid) {
 	if (user_logged_in(username, password)) {
 		out_msg("User already logged in\n");
 		return true; // or false?
@@ -106,12 +111,12 @@ bool remove_user(int session_id, char *username) {
         printf("Error: User not found.\n");
         return false;
     }
-    users_array[index].joined = false;
+    servers[session_id].users_array[index].joined = false;
     memset(servers[session_id].users_array[index].username, 0, sizeof(servers[session_id].users_array[index].username));
     memset(servers[session_id].users_array[index].password, 0, sizeof(servers[session_id].users_array[index].password));
     servers[session_id].users_array[index].sockfd = -1;
 	servers[session_id].users_array[index].threadid = -1;
-	printf("User %s removed.\n", username);
+	fprintf("User %s removed.\n", username);
     servers[session_id].active_users--;
 	return true;
 }
@@ -145,7 +150,7 @@ void init_session(int session_id) {
 	servers[session_id].active_users = 0;
 }
 
-bool join_session(int session_id, char *username, char *password, int sockfd, pthread_t threadid) {
+bool join_session(int session_id, char *username, char *password, int sockfd, int threadid) {
 	if (!active_session(session_id)) {return false;}
 	if (!valid_user(username, password)) {return false;}
 	return add_user(session_id, username, password, sockfd, threadid);
@@ -167,26 +172,17 @@ void reset_session(int session_id) {
         memset(servers[session_id].users_array[i].password, 0, sizeof(servers[session_id].users_array[i].password));
         servers[session_id].users_array[i].logged_in = false;
 		servers[session_id].users_array[i].joined = false;
-        servers[session_id].users_array[i].last_access = -1;
-        servers[session_id].users_array[i].privilege = -1;
+        servers[session_id].users_array[i].sockfd = -1;
+        servers[session_id].users_array[i].threadid = -1;
     }
 
     printf("Session %d has been reset.\n", session_id);
 }
 
-// get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa) {
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
 struct message login_cmd(struct message msg) {
 	bool success;
 	unsigned int type;
-	char data[MAX_DATA];
+	unsigned char data[MAX_DATA];
 	if (!valid_user(msg.source, msg.data)) {
 		out_msg("Invalid user\n");
 		type = LO_NAK;
@@ -196,7 +192,7 @@ struct message login_cmd(struct message msg) {
 		out_msg("Valid user\n");
 		type = LO_ACK;
 		// use locking here
-		success = login_user(session_id, msg.source, msg.data, -1, -1);
+		success = login_user(msg.source, msg.data, -1, -1);
 	}
 	// fix output message
 }
@@ -205,7 +201,7 @@ struct message join_cmd(struct message msg) {
 	bool success;
 	int session_id = atoi((char*)(msg.data));
 	unsigned int type;
-	char data[MAX_DATA];
+	unsigned char data[MAX_DATA];
 	if (!active_session(session_id) || in_session(session_id, msg.source)) {
 		out_msg("invalid join request\n");
 		type = LO_NAK;
@@ -213,7 +209,7 @@ struct message join_cmd(struct message msg) {
 	else {
 		out_msg("valid join request\n");
 		type = JN_ACK;
-		data = session_id; //is this correct
+		sprintf((char *)(data), "%d", session_id);
 
 		//use locking here
 		success = join_session(session_id, msg.source, msg.data, -1, -1);
@@ -224,7 +220,7 @@ struct message join_cmd(struct message msg) {
 struct message leave_cmd(struct message msg) {
 	bool success;
 	unsigned int type;
-	char data[MAX_DATA];
+	unsigned char data[MAX_DATA];
 	for (int i = 0; i < NUM_SESSIONS; i++) {
 		if (in_session(i, msg.source)) {
 			//use locking here
@@ -237,7 +233,17 @@ struct message leave_cmd(struct message msg) {
 struct message new_cmd(struct message msg) {
 	bool success;
 	unsigned int type;
-	char data[MAX_DATA];
+	unsigned char data[MAX_DATA];
+	int count;
+	for (int i = 0; i < NUM_SESSIONS; i++) {
+		if (servers[i].init == false) {
+			init_session(i);
+			type = NS_ACK;
+			sprintf((char *)(data), "%d", i);
+			count++;
+		}
+	}
+	if (!count) {out_msg("error, max sessions reached\n");}
 }
 
 struct message message_cmd(struct message msg) {
@@ -254,7 +260,9 @@ struct message query_cmd(struct message msg) {
 
 
 
-void client_handler(int session_id, char *username, char *password, int sockfd, pthread_t threadid) {
+void client_handler(int session_id, char *username, char *password, int sockfd, int threadid) {
+	struct message msg;
+	struct message msg_send;
 	if (msg.type == LOGIN) {msg_send = login_cmd(msg);}
 	else if (msg.type == JOIN) {msg_send = join_cmd(msg);}
 	else if (msg.type == LEAVE_SESS) {msg_send = leave_cmd(msg);}
