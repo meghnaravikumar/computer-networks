@@ -21,12 +21,10 @@ int main(int argc, char *argv[])
     fd_set master;    // master file descriptor list
     fd_set read_fds;  // temp file descriptor list for select()
     int fdmax;        // maximum file descriptor number
-
     int listener;     // listening socket descriptor
     int newfd;        // newly accept()ed socket descriptor
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
-
     char buf[256];    // buffer for client data
     int nbytes;
 
@@ -48,7 +46,7 @@ int main(int argc, char *argv[])
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
     if ((rv = getaddrinfo(NULL, port, &hints, &ai)) != 0) {
-        fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
+        fprintf(stderr, "server: %s\n", gai_strerror(rv));
         exit(1);
     }
 
@@ -65,20 +63,19 @@ int main(int argc, char *argv[])
             close(listener);
             continue;
         }
-
         break;
     }
 
     // if we got here, it means we didn't get bound
     if (p == NULL) {
-        fprintf(stderr, "selectserver: failed to bind\n");
+        fprintf(stderr, "[Failed to bind\n");
         exit(2);
     }
 
     freeaddrinfo(ai); // all done with this
 
     // let the user know that we were successful with binding
-    fprintf(stdout, "binding successful!\n");
+    fprintf(stdout, "[Binding successful!]\n");
 
     // listen
     if (listen(listener, 10) == -1) {
@@ -87,15 +84,13 @@ int main(int argc, char *argv[])
     }
 
     // let the user know that the server is on
-    fprintf(stdout, "the server is listening...\n");
+    fprintf(stdout, "[The server is listening...]\n");
 
     // add the listener to the master set
     FD_SET(listener, &master);
 
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
-
-
 
     // main loop
     for(;;) {
@@ -122,7 +117,7 @@ int main(int argc, char *argv[])
                         if (newfd > fdmax) {    // keep track of the max
                             fdmax = newfd;
                         }
-                        printf("selectserver: new connection from %s on "
+                        printf("New connection from %s on "
                             "socket %d\n",
                             inet_ntop(remoteaddr.ss_family,
                                 get_in_addr((struct sockaddr*)&remoteaddr),
@@ -135,7 +130,7 @@ int main(int argc, char *argv[])
                         // got error or connection closed by client
                         if (nbytes == 0) {
                             // connection closed
-                            printf("selectserver: socket %d hung up\n", i);
+                            printf("server: socket %d hung up\n", i);
                         } else {
                             perror("recv");
                         }

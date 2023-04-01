@@ -1,6 +1,5 @@
 /*
 ** client.c -- a stream socket client demo
-* git msg check?
 */
 
 #include <stdio.h>
@@ -19,7 +18,7 @@
 
 #include "utils.h"
 
-void *receive_handler(void *);
+void *recv_handler(void *);
 
 int main(int argc, char *argv[]){
 
@@ -73,7 +72,7 @@ int main(int argc, char *argv[]){
 
     inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
             s, sizeof s);
-    fprintf(stdout, "client: connecting to %s\n", s);
+    fprintf(stdout, "[client: connecting to %s\n]", s);
 
     freeaddrinfo(servinfo); // all done with this structure
 
@@ -86,8 +85,8 @@ int main(int argc, char *argv[]){
     // keep recieving messages using this thread
     pthread_t recv_thread;
 
-    if(pthread_create(&recv_thread, NULL, receive_handler, (void*)(intptr_t) sockfd) < 0){
-        perror("could not create thread");
+    if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
+        perror("thread creation");
         return 1;
     }
 
@@ -121,7 +120,7 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
-void *receive_handler(void *sock_fd){
+void *recv_handler(void *sock_fd){
     char buf[MAXBUFLEN];
     int numbytes;
 
