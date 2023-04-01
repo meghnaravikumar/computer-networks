@@ -1,5 +1,6 @@
 /*
 ** client.c -- a stream socket client demo
+* git msg check?
 */
 
 #include <stdio.h>
