@@ -121,5 +121,6 @@ enum
     QU_ACK, // <users and sessions>, Reply followed by a list of users online
     LOGOUT,
     LOGOUT_ACK,
-    LV_SESS_ACK
+    LV_SESS_ACK,
+    DM
 } message_type;
