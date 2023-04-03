@@ -162,6 +162,43 @@ int main(int argc, char *argv[])
                         /************** every other command **************/
                         if(command_handler(msg, i)){
                             continue;
+                        /************** private message **************/
+                        }else if (msg.type == DM) {
+                            unsigned char localData[1000];
+                            unsigned char dmUsername[1000];
+                            unsigned char newMessage[100];
+                            memcpy(localData, msg.data, sizeof(msg.data)); //make a local copy of the message data
+                            unsigned char* colon_ptr = strchr(localData, ':');
+                            if (colon_ptr != NULL) {
+                                size_t len = colon_ptr - (localData + 4);
+                                strncpy(dmUsername, (localData + 4), len);
+                                dmUsername[len] = '\0';
+                                strcpy(newMessage, colon_ptr + 2);
+                                memmove(newMessage + 4, newMessage, strlen(newMessage) + 1);
+                                memcpy(newMessage, "dm: ", 4);
+                                printf("dm to: %s\n", dmUsername);
+                            }
+                            // we got some data from a client
+                            for(j = 0; j <= fdmax; j++) {
+                                // send to everyone!
+                                if (FD_ISSET(j, &master)) {
+                                    if (j != listener && j != i) {
+                                        recvIndex = identifyClientByFd(j);
+                                        if(recvIndex == -1) continue;
+                                        // except the listener and ourselves
+                                        // for private messaging, check for a match in username
+                                        if ((strcmp(clients[recvIndex].username, dmUsername) == 0) && clients[recvIndex].is_logged_in){
+                                            struct message msg_packet = make_message(MESSAGE, strlen(newMessage), clients[senderIndex].username, newMessage);
+                                            char *msg_to_send = serialize(msg_packet);
+
+                                            if (send(j, msg_to_send, nbytes, 0) == -1) {
+                                                perror("send");
+                                            }
+                                        }
+                                        memset(&buf, sizeof(buf), 0);
+                                    }
+                                }
+                            }
                         /************** message **************/
                         }else{
 
