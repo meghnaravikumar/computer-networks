@@ -137,3 +137,53 @@ enum
     DM,
     NS_NAK
 } message_type;
+
+struct client regClients[MAXUSERS];
+
+void read_users_from_file() {
+    FILE* file = fopen("users.txt", "r");
+    if (!file) {
+        perror("Error opening file");
+        return;
+    }
+
+    int i = 0;
+    unsigned char line[64];
+    while (fgets(line, sizeof(line), file)) {
+        unsigned char* username = strtok(line, ";");
+        unsigned char* password = strtok(NULL, ";");
+        password[strcspn(password, "\n")] = '\0';
+        if (username && password) {
+            strncpy(regClients[i].username, username, sizeof(username));
+            strncpy(regClients[i].password, password, sizeof(password));
+            regClients[i].sockfd = -1;
+            strcpy(regClients[i].session_id, "-1");
+            regClients[i].is_logged_in = false;
+            i++;
+        }
+    }
+    fclose(file);
+    return;
+}
+
+void add_user_to_file(const char* username, const char* password) {
+    FILE* file = fopen("users.txt", "a");
+    if (!file) {
+        perror("Error opening file");
+        return;
+    }
+
+    fprintf(file, "%s;%s\n", username, password);
+
+    fclose(file);
+}
+
+int next_available_index_reg(){
+    for(int i =0; i < MAXUSERS; i++){
+        if(strcmp(regClients[i].username,"-1") == 0 && regClients[i].is_logged_in == 0){
+            fprintf(stdout, "%s\n", regClients[i].username);
+            return i;
+        }
+    }
+    return -1;
+}
