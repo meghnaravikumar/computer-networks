@@ -24,6 +24,7 @@ int get_client_index_with_sockfd(int sockfd);
 int get_client_index_with_name(struct message msg);
 int find_session(char *session_id);
 bool username_available(char *username);
+bool user_registered(char *username, char *password);
 
 int main(int argc, char *argv[])
 {
@@ -269,6 +270,21 @@ bool command_handler(struct message msg, int sockfd){
 
 void init_server(){
     for(int i = 0; i < MAXUSERS; i++){
+        strcpy(regClients[i].username, "-1");
+        strcpy(regClients[i].password, "-1");
+        regClients[i].sockfd = -1;
+        strcpy(regClients[i].session_id, "-1");
+        regClients[i].is_logged_in = false;
+        // fprintf(stdout, "client %d: %s, %s\n", i, regClients[i].username, regClients[i].password);
+
+    }
+    
+    read_users_from_file();
+    // for(int i = 0; i < MAXUSERS; i++){
+    //     fprintf(stdout, "client %d: %s\n", i, regClients[i].username);
+    //     fprintf(stdout, "client %d: %s\n", i, regClients[i].password);
+    // }
+    for(int i = 0; i < MAXUSERS; i++){
         strcpy(clients[i].username, "-1");
         strcpy(clients[i].password, "-1");
         clients[i].sockfd = -1;
@@ -360,6 +376,10 @@ void process_login(struct message msg, int sockfd){
     if(!check){
         char *error = msg.source;
         strcat(error, " already taken as a username");
+        msg_packet = make_message(LO_NAK, strlen(error), msg.source, error);
+    }else if(!user_registered(msg.source, msg.data)) {
+        char *error = msg.source;
+        strcat(error, " not a registered user");
         msg_packet = make_message(LO_NAK, strlen(error), msg.source, error);
     }else{
         int index = next_available_index();
@@ -501,4 +521,14 @@ bool username_available(char *username){
         }
     }
     return true;
+}
+
+bool user_registered(char *username, char *password){
+    for (int i = 0; i < MAXUSERS; i++){
+        // find the index of the user with the same name
+        if ((strcmp(regClients[i].username, username)==0) && (strcmp(regClients[i].password, password)==0)){
+            return true;
+        }
+    }
+    return false;
 }
