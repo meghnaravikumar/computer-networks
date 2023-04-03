@@ -12,6 +12,8 @@ void joinsession(char *buf);
 void logout();
 void list();
 void leavesession(char *buf);
+void quit();
+void login_check();
 
 /************** global variable declarations **************/
 bool client_logged_in = false;
@@ -34,6 +36,10 @@ int main(int argc, char *argv[]){
 
         /************** login **************/
         if((strncmp(buf, "/login", 6))== 0){
+            if(client_logged_in){
+            fprintf(stdout, "Already logged in.\n");
+            continue;
+            }
             login(buf);
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
@@ -41,9 +47,13 @@ int main(int argc, char *argv[]){
             }
         /************** quit **************/
         }else if((strncmp(buf, "/quit", 5))== 0){
-            exit(0);
+            quit();
         /************** create session **************/
         }else if(strncmp(buf, "/createsession", 14) == 0){
+            if(!client_logged_in){
+                fprintf(stdout, "Please log in first.\n");
+                continue;
+            }
             createsession(buf);
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
@@ -51,6 +61,10 @@ int main(int argc, char *argv[]){
             }
         /************** join session **************/
         }else if(strncmp(buf, "/joinsession", 12) == 0){
+            if(!client_logged_in){
+                fprintf(stdout, "Please log in first.\n");
+                continue;
+            }
             joinsession(buf);
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
@@ -58,6 +72,10 @@ int main(int argc, char *argv[]){
             }
         /************** leave session **************/
         }else if(strncmp(buf, "/leavesession", 13) == 0){
+            if(!client_logged_in){
+                fprintf(stdout, "Please log in first.\n");
+                continue;
+            }
             leavesession(buf);
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
@@ -65,17 +83,21 @@ int main(int argc, char *argv[]){
             }
         /************** list **************/
         }else if(strncmp(buf, "/list", 5) == 0){
+            if(!client_logged_in){
+                fprintf(stdout, "Please log in first.\n");
+                continue;
+            }
             list();
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
                 return 2;
             }
-        /************** quit **************/
-        }else if(strncmp(buf, "/quit", 5) == 0){
-            close(sockfd);
-            return 0;
         /************** logout **************/
         }else if(strncmp(buf, "/logout", 7) == 0){
+            if(!client_logged_in){
+                fprintf(stdout, "Please log in first.\n");
+                continue;
+            }
             pthread_cancel(recv_thread);
             logout();
             //pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd);
@@ -128,10 +150,10 @@ void *recv_handler(void *sock_fd){
                 client_logged_in = true;
                 fprintf(stdout, "[%s is logged into to the server!]\n", msg.source);
             }else if(msg.type == LO_NAK){
-                fprintf(stdout, "[%s could not be logged into the server.]\n", msg.source);
-                fprintf(stdout, "[Reason: %s]\n", msg.data);
+                fprintf(stdout, "[%s. could not be logged into the server.]\n", msg.source);
             }else if(msg.type == MESSAGE){
-                fprintf(stdout, "%s: %s\n", msg.source, msg.data);
+                buf[strcspn(buf, "\n")] = '\0';
+                fprintf(stdout, "%s: %s", msg.source, msg.data);
             }else if(msg.type == NS_ACK){
                 fprintf(stdout, "%s successfully created %s\n", msg.source, msg.data);
             }else if(msg.type == JN_ACK){
@@ -139,9 +161,13 @@ void *recv_handler(void *sock_fd){
             }else if(msg.type == LV_SESS_ACK){
                 fprintf(stdout, "%s successfully left the session\n", msg.source);
             }else if(msg.type == QU_ACK){
-                fprintf(stdout, "%s\n", msg.data);
-            // }else if(msg.type == LOGOUT_ACK){
-            //     fprintf(stdout, "%s successfully logged out.\n", msg.source);
+                fprintf(stdout, "%s", msg.data);
+            }else if(msg.type == LOGOUT_ACK){
+                fprintf(stdout, "%s successfully logged out.\n", msg.source);
+            }else if(msg.type == JN_NAK){
+                fprintf(stdout, "%s.\n", msg.data);
+            }else if(msg.type == NS_NAK){
+                fprintf(stdout, "%s.\n", msg.data);
             }else{
                 fprintf(stdout, "%s", buf);
             }
@@ -214,7 +240,7 @@ void login(char *buf){
 
     inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
             s, sizeof s);
-    fprintf(stdout, "[client: connecting to %s]\n", s);
+    //fprintf(stdout, "[client: connecting to %s]\n", s);
 
     freeaddrinfo(servinfo); // all done with this structure
 
@@ -234,7 +260,7 @@ void login(char *buf){
 
     pthread_mutex_unlock(&lock);
     // confirmation output to the user
-    //fprintf(stdout, "[%s is logged into to the server!]\n", username);
+    // fprintf(stdout, "[%s is logged into to the server!]\n", username);
 }
 
 void createsession(char *buf){
@@ -309,18 +335,18 @@ void logout(){
     client_logged_in = false;
     close(sockfd);
 
-    // pthread_mutex_lock(&lock);
-    // struct message msg_packet = make_message(LOGOUT, 0, username, "");
-    // char *msg_to_send = serialize(msg_packet);
+    pthread_mutex_lock(&lock);
+    struct message msg_packet = make_message(LOGOUT, 0, username, "");
+    char *msg_to_send = serialize(msg_packet);
 
-    // if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
-    //     printf("oof \n");
-    // }
+    if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
+        printf("oof \n");
+    }
 
-    // memset(&msg_to_send, sizeof(msg_to_send), 0);
-    // memset(&msg_packet, sizeof(msg_packet), 0);
+    memset(&msg_to_send, sizeof(msg_to_send), 0);
+    memset(&msg_packet, sizeof(msg_packet), 0);
 
-    // pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&lock);
 }
 
 void leavesession(char *buf){
@@ -372,4 +398,23 @@ void list(){
     memset(&msg_packet, sizeof(msg_packet), 0);
 
     pthread_mutex_unlock(&lock);
+}
+
+void quit(){
+    pthread_mutex_lock(&lock);
+
+    struct message msg_packet = make_message(EXIT, 0, username, "-1");
+    char *msg_to_send = serialize(msg_packet);
+
+    if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
+        printf("oof \n");
+    }
+
+    memset(&msg_to_send, sizeof(msg_to_send), 0);
+    memset(&msg_packet, sizeof(msg_packet), 0);
+
+    pthread_mutex_unlock(&lock);
+
+    close(sockfd);
+    exit(0);
 }

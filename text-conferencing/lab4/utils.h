@@ -14,10 +14,10 @@
 #include <stdbool.h>
 
 #define MAXBUFLEN 100
-#define MAXUSERS 50
+#define MAXUSERS 20
 #define MAX_DATA 1000
 #define MAX_NAME 50
-#define MAX_SESSIONS 5
+#define MAX_SESSIONS 10
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -36,6 +36,12 @@ struct client{
     unsigned char session_id[MAX_NAME];
     bool is_logged_in;
 };
+
+struct sessions{
+    unsigned char session_id[MAX_NAME];
+    unsigned char *users[MAX_NAME]; // useless lol
+};
+
 
 struct message {
     unsigned int type;
@@ -65,10 +71,13 @@ struct message deserialize(char *msg){
     char *args[5];
     char copy[MAXBUFLEN];
     strcpy(copy, msg);
-    copy[strcspn(copy, "\n")] = '\0';
-    char *tok;
 
-    char* rest;
+    //copy[strcspn(copy, "\n")] = '\0';
+
+
+    // https://cplusplus.com/reference/cstring/strrchr/ ?
+
+    char *tok;
 
     tok = strtok(copy, "&");
     while (tok != NULL) {
@@ -77,9 +86,12 @@ struct message deserialize(char *msg){
         tok = strtok(NULL, "&");
         nargs++;
     }
+    memset(&copy, sizeof(copy), 0);
 
-
+    //printf("%s", args[3]);
     memset(&deserialized_msg, sizeof(deserialized_msg), 0);
+    //char *last = args[3];
+    //last[strlen(last)-1] = '\0';
 
     deserialized_msg.type = atoi(args[0]);
     deserialized_msg.size = atoi(args[1]);
@@ -122,5 +134,6 @@ enum
     LOGOUT,
     LOGOUT_ACK,
     LV_SESS_ACK,
-    DM
+    DM,
+    NS_NAK
 } message_type;

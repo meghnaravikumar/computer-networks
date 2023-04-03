@@ -5,7 +5,7 @@
 #include "utils.h"
 
 static struct client clients[MAXUSERS];
-char *sessions[MAX_SESSIONS];
+static struct sessions session_list[MAX_SESSIONS];
 
 /************** primary command functions **************/
 void process_login(struct message msg, int sockfd);
@@ -13,15 +13,17 @@ void process_createsession(struct message msg, int sockfd);
 void process_joinsession(struct message msg, int sockfd);
 void process_query(struct message msg, int sockfd);
 void process_logout(struct message msg, int sockfd);
-void process_exit();
+void process_exit(struct message msg, int sockfd);
 void process_leavesession(struct message msg, int sockfd);
 
 /************** helper functions **************/
 bool command_handler(struct message msg, int sockfd);
 void init_server();
 int next_available_index();
-int identifyClientByFd(int fd);
-int identifyClientByUsername(struct message msg);
+int get_client_index_with_sockfd(int sockfd);
+int get_client_index_with_name(struct message msg);
+int find_session(char *session_id);
+bool username_available(char *username);
 
 int main(int argc, char *argv[])
 {
@@ -114,7 +116,7 @@ int main(int argc, char *argv[])
         // run through the existing connections looking for data to read
         for(i = 0; i <= fdmax; i++) {
             memset(&buf, sizeof(buf), 0);
-            senderIndex = identifyClientByFd(i);
+            senderIndex = get_client_index_with_sockfd(i);
 
             //fprintf(stdout, "sender: %s\n", clients[senderIndex].username);
             if (FD_ISSET(i, &read_fds)) { // we got one!!
@@ -183,7 +185,7 @@ int main(int argc, char *argv[])
                                 // send to everyone!
                                 if (FD_ISSET(j, &master)) {
                                     if (j != listener && j != i) {
-                                        recvIndex = identifyClientByFd(j);
+                                        recvIndex = get_client_index_with_sockfd(j);
                                         if(recvIndex == -1) continue;
                                         // except the listener and ourselves
                                         // for private messaging, check for a match in username
@@ -212,7 +214,7 @@ int main(int argc, char *argv[])
                                 // send to everyone!
                                 if (FD_ISSET(j, &master)) {
                                     if (j != listener && j != i) {
-                                        recvIndex = identifyClientByFd(j);
+                                        recvIndex = get_client_index_with_sockfd(j);
                                         if(recvIndex == -1) continue;
                                         // except the listener and ourselves
                                         if ((strcmp(clients[recvIndex].session_id, clients[senderIndex].session_id) == 0) && clients[recvIndex].is_logged_in){
@@ -243,7 +245,7 @@ bool command_handler(struct message msg, int sockfd){
             process_login(msg, sockfd);
             return true;
         case EXIT:
-            process_exit();
+            process_exit(msg, sockfd);
             return true;
         case JOIN:
             process_joinsession(msg, sockfd);
@@ -257,9 +259,9 @@ bool command_handler(struct message msg, int sockfd){
         case QUERY:
             process_query(msg, sockfd);
             return true;
-        // case LOGOUT:
-        //     process_logout(msg, sockfd);
-        //     return true;
+        case LOGOUT:
+            process_logout(msg, sockfd);
+            return true;
         default: // doesn't match anything
             return false;
     }
@@ -277,25 +279,32 @@ void init_server(){
     }
 
     for(int i =0; i < MAX_SESSIONS; i++){
-        sessions[i] = "-1";
+        strcpy(session_list[i].session_id, "-1");
     }
+
+    strcpy(session_list[0].session_id, "lobby");
 }
 
 void process_query(struct message msg, int sockfd){
-    char *message_to_send;
-    strcat(message_to_send, "Active Users:\n");
-    for(int i =0; i < MAXUSERS; i++){
-        if(strcmp(clients[i].username, "-1") != 0 && (clients[i].is_logged_in == true)){
-            char *user = clients[i].username;
-            char *session = clients[i].session_id;
-            //strcat(user, "\n");
-            strcat(session, "\n");
-            strcat(message_to_send, user);
+
+
+    char message_to_send[MAX_DATA];
+    char message_to_send2[MAX_DATA];
+    memset(&message_to_send, sizeof(message_to_send), 0);
+    strcpy(message_to_send, "List of active users and sessions:\n");
+
+    for(int i = 0; i < MAXUSERS; i++) {
+        if((strcmp(clients[i].username,"-1") != 0) && (clients[i].is_logged_in == true)){
+            fprintf(stdout, "index query: %d\n", i);
+            strcat(message_to_send, clients[i].username);
             strcat(message_to_send, " in ");
-            strcat(message_to_send, session);
+            strcat(message_to_send, clients[i].session_id);
+            strcat(message_to_send, "\n");
         }
     }
+
     struct message msg_packet = make_message(QU_ACK, strlen(message_to_send), msg.source, message_to_send);
+    memset(&message_to_send, sizeof(message_to_send), 0);
     char *msg_to_send = serialize(msg_packet);
 
     // send the ack message packet back
@@ -305,19 +314,32 @@ void process_query(struct message msg, int sockfd){
 
     memset(&msg_to_send, sizeof(msg_to_send), 0);
     memset(&msg_packet, sizeof(msg_packet), 0);
+    memset(&message_to_send, sizeof(message_to_send), 0);
 }
 
 void process_createsession(struct message msg, int sockfd){
-    // int index = identifyClientByFd(sockfd);
+    // int index = get_client_index_with_sockfd(sockfd);
     // clients[index].session_id = msg.data;
-    int i;
-    for(i =0; i < MAX_SESSIONS; i++){
-       if(strcmp(sessions[i],"-1") == 0) break;
+    struct message msg_packet;
+
+    int id = find_session(msg.data);
+
+    if(id == -1){
+        msg_packet =make_message(NS_ACK, strlen(msg.data), msg.source, msg.data);
+
+        int i;
+        for(i =0; i < MAX_SESSIONS; i++){
+            if(strcmp(session_list[i].session_id,"-1") == 0){
+                strcpy(session_list[i].session_id, msg.data);
+                break;
+            }
+        }
+
+    }else{
+        char *error = "Session already exists";
+        msg_packet = make_message(NS_NAK, strlen(error), msg.source, error);
     }
-    sessions[i] = msg.data;
 
-
-    struct message msg_packet = make_message(NS_ACK, strlen(msg.data), msg.source, msg.data);
     char *msg_to_send = serialize(msg_packet);
 
     // send the ack message packet back
@@ -332,17 +354,28 @@ void process_createsession(struct message msg, int sockfd){
 
 void process_login(struct message msg, int sockfd){
 
-    int index = next_available_index();
-    fprintf(stdout, "index: %d\n", index);
+    bool check = username_available(msg.source);
+    struct message msg_packet;
 
-    strcpy(clients[index].username, msg.source);
-    strcpy(clients[index].password, msg.data);
-    clients[index].sockfd = sockfd;
-    strcpy(clients[index].session_id, "lobby");
-    clients[index].is_logged_in = true;
+    if(!check){
+        char *error = msg.source;
+        strcat(error, " already taken as a username");
+        msg_packet = make_message(LO_NAK, strlen(error), msg.source, error);
+    }else{
+        int index = next_available_index();
+        fprintf(stdout, "index: %d\n", index);
+
+        strcpy(clients[index].username, msg.source);
+        strcpy(clients[index].password, msg.data);
+        clients[index].sockfd = sockfd;
+        strcpy(clients[index].session_id, "lobby");
+        clients[index].is_logged_in = true;
+        msg_packet = make_message(LO_ACK, strlen(msg.data), msg.source, msg.data);
+    }
+
 
     fprintf(stdout, "process_login: %s\n", msg.source);
-    struct message msg_packet = make_message(LO_ACK, strlen(msg.data), msg.source, msg.data);
+
     char *msg_to_send = serialize(msg_packet);
 
     // send the ack message packet back
@@ -355,11 +388,10 @@ void process_login(struct message msg, int sockfd){
 
 }
 
-int identifyClientByFd(int fd){
-    int recv_fd;
-    for (recv_fd = 0; recv_fd < MAXUSERS; recv_fd++){
-        if (clients[recv_fd].sockfd == fd){
-            return recv_fd;
+int get_client_index_with_sockfd(int sockfd){
+    for (int i = 0; i < MAXUSERS; i++){
+        if (clients[i].sockfd == sockfd){
+            return i;
         }
     }
     return -1;
@@ -376,15 +408,20 @@ int next_available_index(){
 }
 
 void process_joinsession(struct message msg, int sockfd){
-    int index = identifyClientByUsername(msg);
-    strcpy(clients[index].session_id, msg.data);
-    int i;
-    for(i =0; i < MAX_SESSIONS; i++){
-       if(strcmp(sessions[i], msg.data) == 0) break;
-    }
-    sessions[i] = msg.data;
+    struct message msg_packet;
 
-    struct message msg_packet = make_message(JN_ACK, strlen(msg.data), msg.source, msg.data);
+    int id = find_session(msg.data);
+
+    if(id == -1){
+        char *error = msg.data;
+        strcat(error, " doesn't exist");
+        msg_packet = make_message(JN_NAK, strlen(error), msg.source, error);
+    }else{
+        int index = get_client_index_with_name(msg);
+        strcpy(clients[index].session_id, msg.data);
+        msg_packet =make_message(JN_ACK, strlen(msg.data), msg.source, msg.data);
+    }
+
     char *msg_to_send = serialize(msg_packet);
 
     // send the ack message packet back
@@ -394,7 +431,7 @@ void process_joinsession(struct message msg, int sockfd){
 
 }
 
-int identifyClientByUsername(struct message msg){
+int get_client_index_with_name(struct message msg){
     for (int i = 0; i < MAXUSERS; i++){
         // find the index of the user with the same name
         if (strcmp(clients[i].username, msg.source)==0){
@@ -405,11 +442,11 @@ int identifyClientByUsername(struct message msg){
 }
 
 void process_logout(struct message msg, int sockfd){
-    int i = identifyClientByUsername(msg);
-    strcpy(clients[i].username, "-1");
-    strcpy(clients[i].password, "-1");
-    clients[i].sockfd = -1;
-    strcpy(clients[i].session_id, "-1");
+    int i = get_client_index_with_name(msg);
+    // strcpy(clients[i].username, "-1");
+    // strcpy(clients[i].password, "-1");
+    // clients[i].sockfd = -1;
+    // strcpy(clients[i].session_id, "-1");
     clients[i].is_logged_in = false;
 
     struct message msg_packet = make_message(LOGOUT_ACK, 0, msg.source, "");
@@ -421,13 +458,18 @@ void process_logout(struct message msg, int sockfd){
     }
 }
 
-void process_exit(){
-    exit(0);
+void process_exit(struct message msg, int sockfd){
+    int i = get_client_index_with_name(msg);
+    strcpy(clients[i].username, "-1");
+    strcpy(clients[i].password, "-1");
+    clients[i].sockfd = -1;
+    strcpy(clients[i].session_id, "-1");
+    clients[i].is_logged_in = false;
 }
 
 void process_leavesession(struct message msg, int sockfd){
 
-    int index = identifyClientByUsername(msg);
+    int index = get_client_index_with_name(msg);
     // char *original_session = clients[index].session_id;
     strcpy(clients[index].session_id, "lobby");
 
@@ -438,4 +480,25 @@ void process_leavesession(struct message msg, int sockfd){
     if (send(sockfd, msg_to_send, strlen(msg_to_send), 0) < 0){
         perror("LV_SESS_ACK");
     }
+}
+
+
+int find_session(char *session_id){
+    int i;
+    for(i =0; i < MAX_SESSIONS; i++){
+       if(strcmp(session_list[i].session_id,session_id) == 0){
+        return i;
+       }
+    }
+    return -1;
+}
+
+bool username_available(char *username){
+    for (int i = 0; i < MAXUSERS; i++){
+        // find the index of the user with the same name
+        if (strcmp(clients[i].username, username)==0){
+            return false;
+        }
+    }
+    return true;
 }
