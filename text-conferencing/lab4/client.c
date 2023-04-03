@@ -7,6 +7,7 @@
 /************** function declarations **************/
 void *recv_handler(void *);
 void login(char *buf);
+void registeruser(char *buf);
 void createsession(char *buf);
 void joinsession(char *buf);
 void logout();
@@ -41,6 +42,13 @@ int main(int argc, char *argv[]){
             continue;
             }
             login(buf);
+            if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
+                perror("thread creation");
+                return 2;
+            }
+        /************** register **************/
+        }else if((strncmp(buf, "/register", 9))== 0){
+            registeruser(buf);
             if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
                 perror("thread creation");
                 return 2;
@@ -174,6 +182,44 @@ void *recv_handler(void *sock_fd){
         }
         memset(&buf, sizeof(buf), 0);
     }
+}
+
+void registeruser(char *buf){
+    char *password;
+
+    int nargs = 0;
+    char *args[30];
+    char copy[MAXBUFLEN];
+    strcpy(copy, buf);
+    copy[strcspn(copy, "\n")] = '\0';
+    char *tok;
+
+    tok = strtok(copy, " ");
+    while (tok != NULL) {
+        args[nargs] = tok;
+        tok = strtok(NULL, " ");
+        nargs++;
+    }
+
+    memset(&username, sizeof(username), 0); // clean the username buffer
+    strcpy(username, args[1]);
+
+    password = args[2];
+    pthread_mutex_lock(&lock);
+
+    int index = next_available_index_reg();
+
+    strcpy(regClients[index].username, username);
+    strcpy(regClients[index].password, password);
+    regClients[index].sockfd = -1;
+    strcpy(regClients[index].session_id, "-1");
+    regClients[index].is_logged_in = false;
+
+    add_user_to_file(regClients[index].username, regClients[index].password);
+
+    fprintf(stdout, "process_register: %s\n", regClients[index].username);
+
+    pthread_mutex_unlock(&lock);
 }
 
 void login(char *buf){
