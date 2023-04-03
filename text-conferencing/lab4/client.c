@@ -79,6 +79,18 @@ int main(int argc, char *argv[]){
             pthread_cancel(recv_thread);
             logout();
             //pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd);
+        /************** private message **************/
+        }else if(strncmp(buf, "/dm", 3) == 0) {
+
+            // make the message packet
+            memset(&msg_to_send, sizeof(msg_to_send), 0);
+            sprintf(msg_to_send, "%d&%d&%s&%s&", DM, strlen(buf), username, buf);
+            // sprintf(msg_to_send, "%s: %s", username, buf);
+
+            if(send(sockfd, msg_to_send, strlen(msg_to_send), 0) < 0){
+                fprintf(stderr, "Could not send message.");
+                return 1;
+            }
         /************** message **************/
         }else{
             // make the message packet
