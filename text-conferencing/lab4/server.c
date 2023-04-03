@@ -4,15 +4,17 @@
 
 #include "utils.h"
 
-struct client clients[MAXUSERS];
+static struct client clients[MAXUSERS];
 char *sessions[MAX_SESSIONS];
-int client_count = 0;
 
 /************** primary command functions **************/
 void process_login(struct message msg, int sockfd);
 void process_createsession(struct message msg, int sockfd);
 void process_joinsession(struct message msg, int sockfd);
-void process_query();
+void process_query(struct message msg, int sockfd);
+void process_logout(struct message msg, int sockfd);
+void process_exit();
+void process_leavesession(struct message msg, int sockfd);
 
 /************** helper functions **************/
 bool command_handler(struct message msg, int sockfd);
@@ -20,7 +22,6 @@ void init_server();
 int next_available_index();
 int identifyClientByFd(int fd);
 int identifyClientByUsername(struct message msg);
-
 
 int main(int argc, char *argv[])
 {
@@ -157,23 +158,10 @@ int main(int argc, char *argv[])
 
                         struct message msg = deserialize(buf);
                         memset(&buf, sizeof(buf), 0);
-                        //memset(&msg, sizeof(msg), 0);
-                        //fprintf(stdout, "%s\n", msg.data);
-
-                        //process_query();
 
                         /************** every other command **************/
                         if(command_handler(msg, i)){
                             continue;
-                        // if(msg.type == LOGIN){
-                        //     process_login(msg, i);
-                        //     struct message msg_packet = make_message(LO_ACK, strlen(msg.data), msg.source, msg.data);
-                        //     char *msg_to_send = serialize(msg_packet);
-
-                        //     // send the ack message packet back
-                        //     if (send(i, msg_to_send, strlen(msg_to_send), 0) < 0){
-                        //         perror("LO_ACK");
-                        //     }
                         /************** message **************/
                         }else{
 
@@ -194,19 +182,15 @@ int main(int argc, char *argv[])
                                             struct message msg_packet = make_message(MESSAGE, strlen(msg.data), clients[senderIndex].username, msg.data);
                                             char *msg_to_send = serialize(msg_packet);
 
-                                                if (send(j, msg_to_send, nbytes, 0) == -1) {
-                                                    perror("send");
-                                                }
+                                            if (send(j, msg_to_send, nbytes, 0) == -1) {
+                                                perror("send");
                                             }
-                                            memset(&buf, sizeof(buf), 0);
-                                           // memset(&msg_to_send, sizeof(msg_to_send), 0);
+                                        }
+                                        memset(&buf, sizeof(buf), 0);
                                     }
-                                  // memset(&buf, sizeof(buf), 0);
                                 }
-                               // memset(&buf, sizeof(buf), 0);
                             }
                         }
-                        //memset(&buf, sizeof(buf), 0);
                     }
                 } // END handle data from client
             } // END got new incoming connection
@@ -222,6 +206,7 @@ bool command_handler(struct message msg, int sockfd){
             process_login(msg, sockfd);
             return true;
         case EXIT:
+            process_exit();
             return true;
         case JOIN:
             process_joinsession(msg, sockfd);
@@ -230,9 +215,14 @@ bool command_handler(struct message msg, int sockfd){
             process_createsession(msg, sockfd);
             return true;
         case LEAVE_SESS:
+            process_leavesession(msg, sockfd);
             return true;
         case QUERY:
+            process_query(msg, sockfd);
             return true;
+        // case LOGOUT:
+        //     process_logout(msg, sockfd);
+        //     return true;
         default: // doesn't match anything
             return false;
     }
@@ -254,23 +244,30 @@ void init_server(){
     }
 }
 
-void process_query(){
-    // for(int i = 0; i < MAX_SESSIONS; i++){
-    //     if((strcmp(sessions[i], "-1") != 0)){
-    //         fprintf(stdout, "In session %s:\n", sessions[i]);
-    //         for(int j = 0; j < MAXUSERS; j++){
-    //             if(strcmp(clients[j].session_id, sessions[i]) == 0){
-    //                 fprintf(stdout, "%s\n", clients[j].username);
-    //             }
-    //         }
-    //     }
-    // }
-     fprintf(stdout, "current users list:\n");
+void process_query(struct message msg, int sockfd){
+    char *message_to_send;
+    strcat(message_to_send, "Active Users:\n");
     for(int i =0; i < MAXUSERS; i++){
-        if(strcmp(clients[i].username, "-1") != 0){
-            fprintf(stdout, "%s\n", clients[i].username);
+        if(strcmp(clients[i].username, "-1") != 0 && (clients[i].is_logged_in == true)){
+            char *user = clients[i].username;
+            char *session = clients[i].session_id;
+            //strcat(user, "\n");
+            strcat(session, "\n");
+            strcat(message_to_send, user);
+            strcat(message_to_send, " in ");
+            strcat(message_to_send, session);
         }
     }
+    struct message msg_packet = make_message(QU_ACK, strlen(message_to_send), msg.source, message_to_send);
+    char *msg_to_send = serialize(msg_packet);
+
+    // send the ack message packet back
+    if (send(sockfd, msg_to_send, strlen(msg_to_send), 0) < 0){
+        perror("QU_ACK");
+    }
+
+    memset(&msg_to_send, sizeof(msg_to_send), 0);
+    memset(&msg_packet, sizeof(msg_packet), 0);
 }
 
 void process_createsession(struct message msg, int sockfd){
@@ -298,8 +295,6 @@ void process_createsession(struct message msg, int sockfd){
 
 void process_login(struct message msg, int sockfd){
 
-    process_query();
-
     int index = next_available_index();
     fprintf(stdout, "index: %d\n", index);
 
@@ -320,10 +315,6 @@ void process_login(struct message msg, int sockfd){
 
     memset(&msg_to_send, sizeof(msg_to_send), 0);
     memset(&msg_packet, sizeof(msg_packet), 0);
-
-    process_query();
-
-   //print_clients();
 
 }
 
@@ -374,4 +365,40 @@ int identifyClientByUsername(struct message msg){
         }
     }
     return -1;
+}
+
+void process_logout(struct message msg, int sockfd){
+    int i = identifyClientByUsername(msg);
+    strcpy(clients[i].username, "-1");
+    strcpy(clients[i].password, "-1");
+    clients[i].sockfd = -1;
+    strcpy(clients[i].session_id, "-1");
+    clients[i].is_logged_in = false;
+
+    struct message msg_packet = make_message(LOGOUT_ACK, 0, msg.source, "");
+    char *msg_to_send = serialize(msg_packet);
+
+    // send the ack message packet back
+    if (send(sockfd, msg_to_send, strlen(msg_to_send), 0) < 0){
+        perror("LOGOUT_ACK");
+    }
+}
+
+void process_exit(){
+    exit(0);
+}
+
+void process_leavesession(struct message msg, int sockfd){
+
+    int index = identifyClientByUsername(msg);
+    // char *original_session = clients[index].session_id;
+    strcpy(clients[index].session_id, "lobby");
+
+    struct message msg_packet = make_message(LV_SESS_ACK, 0, msg.source, "-1");
+    char *msg_to_send = serialize(msg_packet);
+
+    // send the ack message packet back
+    if (send(sockfd, msg_to_send, strlen(msg_to_send), 0) < 0){
+        perror("LV_SESS_ACK");
+    }
 }

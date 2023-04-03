@@ -9,6 +9,9 @@ void *recv_handler(void *);
 void login(char *buf);
 void createsession(char *buf);
 void joinsession(char *buf);
+void logout();
+void list();
+void leavesession(char *buf);
 
 /************** global variable declarations **************/
 bool client_logged_in = false;
@@ -53,6 +56,29 @@ int main(int argc, char *argv[]){
                 perror("thread creation");
                 return 2;
             }
+        /************** leave session **************/
+        }else if(strncmp(buf, "/leavesession", 13) == 0){
+            leavesession(buf);
+            if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
+                perror("thread creation");
+                return 2;
+            }
+        /************** list **************/
+        }else if(strncmp(buf, "/list", 5) == 0){
+            list();
+            if(pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd) < 0){
+                perror("thread creation");
+                return 2;
+            }
+        /************** quit **************/
+        }else if(strncmp(buf, "/quit", 5) == 0){
+            close(sockfd);
+            return 0;
+        /************** logout **************/
+        }else if(strncmp(buf, "/logout", 7) == 0){
+            pthread_cancel(recv_thread);
+            logout();
+            //pthread_create(&recv_thread, NULL, recv_handler, (void*)(intptr_t) sockfd);
         /************** message **************/
         }else{
             // make the message packet
@@ -98,6 +124,12 @@ void *recv_handler(void *sock_fd){
                 fprintf(stdout, "%s successfully created %s\n", msg.source, msg.data);
             }else if(msg.type == JN_ACK){
                 fprintf(stdout, "%s successfully joined %s\n", msg.source, msg.data);
+            }else if(msg.type == LV_SESS_ACK){
+                fprintf(stdout, "%s successfully left the session\n", msg.source);
+            }else if(msg.type == QU_ACK){
+                fprintf(stdout, "%s\n", msg.data);
+            // }else if(msg.type == LOGOUT_ACK){
+            //     fprintf(stdout, "%s successfully logged out.\n", msg.source);
             }else{
                 fprintf(stdout, "%s", buf);
             }
@@ -213,6 +245,7 @@ void createsession(char *buf){
     char *session_id = args[1];
 
     // fprintf(stdout, "%s\n", session_id);
+    pthread_mutex_lock(&lock);
 
     struct message msg_packet = make_message(NEW_SESS, strlen(session_id), username, session_id);
     char *msg_to_send = serialize(msg_packet);
@@ -244,8 +277,79 @@ void joinsession(char *buf){
     }
 
     char *session_id = args[1];
+    pthread_mutex_lock(&lock);
 
     struct message msg_packet = make_message(JOIN, strlen(session_id), username, session_id);
+    char *msg_to_send = serialize(msg_packet);
+
+    if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
+        printf("oof \n");
+    }
+
+    memset(&msg_to_send, sizeof(msg_to_send), 0);
+    memset(&msg_packet, sizeof(msg_packet), 0);
+
+    pthread_mutex_unlock(&lock);
+}
+
+void logout(){
+
+    client_logged_in = false;
+    close(sockfd);
+
+    // pthread_mutex_lock(&lock);
+    // struct message msg_packet = make_message(LOGOUT, 0, username, "");
+    // char *msg_to_send = serialize(msg_packet);
+
+    // if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
+    //     printf("oof \n");
+    // }
+
+    // memset(&msg_to_send, sizeof(msg_to_send), 0);
+    // memset(&msg_packet, sizeof(msg_packet), 0);
+
+    // pthread_mutex_unlock(&lock);
+}
+
+void leavesession(char *buf){
+    int nargs = 0;
+    char *args[30];
+    char copy[MAXBUFLEN];
+    strcpy(copy, buf);
+    copy[strcspn(copy, "\n")] = '\0';
+    char *tok;
+
+    tok = strtok(copy, " ");
+    while (tok != NULL) {
+        args[nargs] = tok;
+        tok = strtok(NULL, " ");
+        nargs++;
+    }
+
+    //if(nargs != 2) exit(0);
+
+    //char *session_id = args[1];
+
+    // fprintf(stdout, "%s\n", session_id);
+    pthread_mutex_lock(&lock);
+
+    struct message msg_packet = make_message(LEAVE_SESS, 0, username, "");
+    char *msg_to_send = serialize(msg_packet);
+
+    if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){
+        printf("oof \n");
+    }
+
+    memset(&msg_to_send, sizeof(msg_to_send), 0);
+    memset(&msg_packet, sizeof(msg_packet), 0);
+
+    pthread_mutex_unlock(&lock);
+}
+
+void list(){
+    pthread_mutex_lock(&lock);
+
+    struct message msg_packet = make_message(QUERY, 0, "-1", "-1");
     char *msg_to_send = serialize(msg_packet);
 
     if(send(sockfd,msg_to_send,strlen(msg_to_send), 0) < 0){

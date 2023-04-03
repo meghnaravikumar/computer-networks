@@ -14,7 +14,7 @@
 #include <stdbool.h>
 
 #define MAXBUFLEN 100
-#define MAXUSERS 25
+#define MAXUSERS 50
 #define MAX_DATA 1000
 #define MAX_NAME 50
 #define MAX_SESSIONS 5
@@ -118,5 +118,8 @@ enum
     NS_ACK, // Acknowledge new conference session
     MESSAGE, // <message data>, Send a message to the session or display the message if it is received
     QUERY, // Get a list of online users and available sessions
-    QU_ACK // <users and sessions>, Reply followed by a list of users online
+    QU_ACK, // <users and sessions>, Reply followed by a list of users online
+    LOGOUT,
+    LOGOUT_ACK,
+    LV_SESS_ACK
 } message_type;
